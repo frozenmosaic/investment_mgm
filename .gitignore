@@ -1,5 +1,12 @@
+# nonpublic info
 portfolios.py
 investment_core*
-.ipynb_checkpoints
+
+# archive/testing
 archive
 test.py
+
+# system
+.ipynb_checkpoints
+__pycache__
+.DS_Store
