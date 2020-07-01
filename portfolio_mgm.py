@@ -12,14 +12,14 @@ import pandas as pd
 import requests
 import finquant
 from finquant.portfolio import build_portfolio
-
+from portfolios import *
 
 class YFinanceCrawler:
     timeout = 2
     crumb_link = "https://finance.yahoo.com/quote/{0}/history?p={0}"
     crumble_regex = r'CrumbStore":{"crumb":"(.*?)"}'
     quote_link = "https://query1.finance.yahoo.com/v7/finance/download/{quote}?period1={dfrom}&period2={dto}&interval=1mo&events=history&crumb={crumb}"
-    fpath = os.path.join('portfolio-page', 'projects', 'portfolio-management', 'data', 'test.p')
+    fpath = os.path.join('data', 'master.p')
 
     def __init__(self, tickers, years_back=10):
         self.tickers = tickers
@@ -64,64 +64,49 @@ class YFinanceCrawler:
     def priceDf(self):
 
         fpath = self.fpath
-        try:
-            master = shelve.open(fpath, writeback=True)
+        date_index = []
+        master = shelve.open(fpath, writeback=True)
 
-            # if file is not empty
-            if "ver" in master:
-                current_ver = master["ver"]
-                print(current_ver)
+        # if file is not empty
+        if "ver" in master:
+            current_ver = master["ver"]
+            print(current_ver)
 
-                # if master is up-to-date
-                if current_ver == date.today():
+            # if master is up-to-date
+            if current_ver == date.today():
 
-                    new = dict()
-                    query = []
-                    read = []
+                new = dict()
+                query = []
+                read = []
 
-                    # read from master
-                    for ticker in self.tickers:
+                # read from master
+                for ticker in self.tickers:
 
-                        # if master contains ticker
-                        if ticker in master["data"]:
-                            new[ticker] = master["data"][ticker]
-                            read.append(ticker)
+                    # if master contains ticker
+                    if ticker in master["data"]:
+                        new[ticker] = master["data"][ticker]
+                        read.append(ticker)
 
-                        # if master does not contain ticker
-                        else:
-                            # crawl for data from Yahoo Finance
-                            data = self.get_quote(ticker)
-                            prices = data["Adj Close"]
-
-                            # update shelve
-                            master["data"][ticker] = prices
-
-                            # add to dict
-                            new[ticker] = prices
-
-                            query.append(ticker)
-
-                    print("queried: ", query)
-                    print("read: ", read)
-                    print("used today's version \n")
-
-                # else if current version is outdated, query new data
-                else:
-                    new_master = dict(ver=date.today())
-                    new_master["data"] = dict()
-                    new = dict()
-
-                    for ticker in self.tickers:
+                    # if master does not contain ticker
+                    else:
+                        # crawl for data from Yahoo Finance
                         data = self.get_quote(ticker)
                         prices = data["Adj Close"]
-                        new_master["data"][ticker] = prices
+
+                        # update shelve
+                        master["data"][ticker] = prices
+
+                        # add to dict
                         new[ticker] = prices
+                        date_index = data.index
 
-                    master["ver"] = new_master["ver"]
-                    master["data"] = new_master["data"]
-                    print("updated today's ver \n")
+                        query.append(ticker)
 
-            # if file is empty
+                print("queried: ", query)
+                print("read: ", read)
+                print("used today's version \n")
+
+            # else if current version is outdated, query new data
             else:
                 new_master = dict(ver=date.today())
                 new_master["data"] = dict()
@@ -132,21 +117,37 @@ class YFinanceCrawler:
                     prices = data["Adj Close"]
                     new_master["data"][ticker] = prices
                     new[ticker] = prices
+                    date_index = data.index.values
 
                 master["ver"] = new_master["ver"]
                 master["data"] = new_master["data"]
-                print("created new master \n")
+                print("updated today's ver \n")
 
-            new = pd.DataFrame(data=new)
-            date_index = self.getPeriodIndex()
-            new.index = date_index
+        # if file is empty
+        else:
+            new_master = dict(ver=date.today())
+            new_master["data"] = dict()
+            new = dict()
 
-            master.close()
+            for ticker in self.tickers:
+                data = self.get_quote(ticker)
+                prices = data["Adj Close"]
+                new_master["data"][ticker] = prices
+                date_index = data.index
+                new[ticker] = prices
 
-            return new
+            master["ver"] = new_master["ver"]
+            master["data"] = new_master["data"]
+            print("created new master \n")
 
-        except ValueError:
-            print("cannot open shelve")
+        print("creating dataframe")
+        new = pd.DataFrame(data=new)
+        # date_index = self.getPeriodIndex()
+        new.index = date_index
+
+        master.close()
+
+        return new
 
 
 def buildPf(tickers):
@@ -173,3 +174,20 @@ def castFloat(df, col):
         df[c] = "|".join(df[c].tolist()).translate(transtab).split("|")
     df = df.astype(dict.fromkeys(col, "f"))
     return df
+
+
+
+df = YFinanceCrawler(pf[0]).priceDf()
+print(df)
+# pf = build_portfolio(data=df)
+
+# fpath = os.path.join('data', 'master.p')
+# read = []
+# master = shelve.open(fpath)
+# read = master['data']
+# master.close()
+
+# print(read)
+# new = pd.DataFrame(data=new)
+# date_index = self.getPeriodIndex()
+# new.index = date_index
